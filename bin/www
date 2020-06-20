@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+
+/**
+ * 모듈 import
+ *
+ * app - express custom app
+ * debug - 디버그용 모듈 (debug(log) 형태로 사용)
+ * https - TLS 구성 모듈
+ * fs - 파일 접근 모듈
+ */
+
+var app = require('../app');
+const debug = require('debug')('prj:server');
+var https = require('https');
+var http = require('http');
+var fs = require('fs');
+
+/**
+ * 테스트용 TLS Key, Certificate
+ *
+ */
+
+var key_str = "-----BEGIN RSA PRIVATE KEY-----\n" +
+    "MIICXAIBAAKBgQCya8Hb8hHAZ6IqBtfSguAWL4U0JYjmxgY7ex4OpXIaLUk102MO\n" +
+    "fFaUr1Z9hmtX/ddW+bLGX12be+GUZvDm7tK1Q+xAfwgDi9rrbcpjtPKc9Q6qUTte\n" +
+    "4BlRUQq/jm4kEMMip1eEZxxXE01ZpKkMqEA/Fl0cfvo/P3qxEmQAr/EwgwIDAQAB\n" +
+    "AoGAZfShwNfhQPt3dWCXr9nNx5+8FIJmask6An9mO6RbQY4jSbjT4BE5QJm5aN2J\n" +
+    "Naz+gtsJR8ZzLUhrLWxtuOk8ShepX3nzuPriz+FgW8G1jfdnwfCWL6i4EngIaTM1\n" +
+    "bmdOU+wqmv5eWVkdtClSy4J+EhpKciHi8Nt+5bCO24yqTSECQQDpLECZ5Rw91+vE\n" +
+    "Fqhzzma0qI7A8rRD15E73qNY1JVvp5bvoU5VREHeSubwgr9iu5+F1UQ6poZwOpMm\n" +
+    "Pic282MJAkEAw+NRslaaXuXDfjmRfMSRYS9mB76+/Q2nTyI7HBWaFMAWmoh1TsTg\n" +
+    "UMFx2VtpAJpC5XDjKS6AudCsAETGGnCeKwJAKvJ6p53aeM2XYFOoDUR8CFRvjrxl\n" +
+    "VYWT+4oDXi4xpBIjK9nzGqNq2m3DYZNDewUB2d2xJnhblLpFNisGgAmOOQJAOOLS\n" +
+    "3s93lQd0djuRnIIZFfgF0Un7fNFyPPDb6ZP8YvpFlir6ph1WZx1GSrDZFWu28ZqO\n" +
+    "3W67wzpuOMXAIf2CcQJBAOVeXz9aQJvQenB0k4p9WJQAjt0l5o8d6VrsUjO5TqSn\n" +
+    "v7nCYtiTzuL47yeq2p03iJLJVxLqBew66P9OZODZJNw=\n" +
+    "-----END RSA PRIVATE KEY-----\n";
+
+var cert_str = "-----BEGIN CERTIFICATE-----\n" +
+    "MIICjzCCAfgCCQC8rhh/ZD0DljANBgkqhkiG9w0BAQsFADCBizELMAkGA1UEBhMC\n" +
+    "S08xFDASBgNVBAgMC2d5ZW9uZ2dpLWRvMQ4wDAYDVQQHDAVzdXdvbjEOMAwGA1UE\n" +
+    "CgwFcHJvZnExDjAMBgNVBAsMBXByb2ZxMQ4wDAYDVQQDDAVwcm9mcTEmMCQGCSqG\n" +
+    "SIb3DQEJARYXZGFsZWFkZXJwcm9mcUBnbWFpbC5jb20wHhcNMTkwNDIyMTM1MTI4\n" +
+    "WhcNMTkwNTIyMTM1MTI4WjCBizELMAkGA1UEBhMCS08xFDASBgNVBAgMC2d5ZW9u\n" +
+    "Z2dpLWRvMQ4wDAYDVQQHDAVzdXdvbjEOMAwGA1UECgwFcHJvZnExDjAMBgNVBAsM\n" +
+    "BXByb2ZxMQ4wDAYDVQQDDAVwcm9mcTEmMCQGCSqGSIb3DQEJARYXZGFsZWFkZXJw\n" +
+    "cm9mcUBnbWFpbC5jb20wgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALJrwdvy\n" +
+    "EcBnoioG19KC4BYvhTQliObGBjt7Hg6lchotSTXTYw58VpSvVn2Ga1f911b5ssZf\n" +
+    "XZt74ZRm8Obu0rVD7EB/CAOL2uttymO08pz1DqpRO17gGVFRCr+ObiQQwyKnV4Rn\n" +
+    "HFcTTVmkqQyoQD8WXRx++j8/erESZACv8TCDAgMBAAEwDQYJKoZIhvcNAQELBQAD\n" +
+    "gYEAUgyIEtHUN0/2GceGyfFXIx95tseWwrHTIBsq31UCPk+a/nkL0z9KVHwHurSw\n" +
+    "z/9+/KcnuIjKjeO+GGcoBkdd8H0wUygMbzLUay8kGOFKEPhvRPDqF9FKMAumij/P\n" +
+    "vDtIJvqFxOYw125vmhQE5ltzW4Y5zgXJuete+gPlTVYzPGA=\n" +
+    "-----END CERTIFICATE-----\n";
+
+
+var options = {
+    //key: fs.readFileSync('tls/key.pem'),
+    //cert: fs.readFileSync('tls/cert.pem')
+    key: key_str,
+    cert: cert_str
+};
+
+/**
+ * 환경변수에게 사용 가능한 포트를 검사 받아서 적용하는건지 잘 모르지만
+ * 어쨋든 시스템 환경변수 (env)와 연관지어 포트 할당.
+ */
+
+//var port = normalizePort(process.env.PORT || '443');
+var port = normalizePort(process.env.PORT || '80');
+app.set('port', port);
+
+/**
+ * HTTP(S) 서버 생성
+ */
+
+//var server = https.createServer(options, app);
+var server = http.createServer(app);
+
+/**
+ * 정해진 포트로부터 listen.
+ */
+
+server.listen(port);
+server.on('error', onError); // 에러 핸들링 (onError 함수 밑에 정의)
+server.on('listening', onListening); // 리스닝 핸들링 (onListening 함수 밑에 정의)
+
+/**
+ * 포트 넘버 Normalize 함수 (위에서 사용됨.)
+ */
+
+function normalizePort(val) {
+    var port = parseInt(val, 10);
+
+    if (isNaN(port)) {
+        // named pipe
+        return val;
+    }
+
+    if (port >= 0) {
+        // port number
+        return port;
+    }
+
+    return false;
+}
+
+/**
+ * 에러 이벤트 핸들러 함수
+ */
+
+function onError(error) {
+    if (error.syscall !== 'listen') {
+        throw error;
+    }
+
+    var bind = typeof port === 'string'
+        ? 'Pipe ' + port
+        : 'Port ' + port;
+
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+        case 'EACCES':
+            console.error(bind + ' requires elevated privileges');
+            process.exit(1);
+            break;
+        case 'EADDRINUSE':
+            console.error(bind + ' is already in use');
+            process.exit(1);
+            break;
+        default:
+            throw error;
+    }
+}
+
+/**
+ * 리스닝 핸들러 함수
+ */
+
+function onListening() {
+    var addr = server.address();
+    var bind = typeof addr === 'string'
+        ? 'pipe ' + addr
+        : 'port ' + addr.port;
+    debug('Listening on ' + bind);
+}
